@@ -1,0 +1,8 @@
+{
+    "nome_projeto": "ID01_2_ConcEst_TratarDados",
+    "descricao_projeto": "Faz conciliação dos Estacionamentos",
+    "cliente": "Partage",
+    "ferramenta": "Python RPA",
+    "sistemas_interacao": "excel;sqlite;sites",
+    "tipo_fila": "SqLite"
+  }
