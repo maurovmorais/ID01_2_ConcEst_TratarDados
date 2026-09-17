@@ -8,10 +8,10 @@ import ID01_2_ConcEst_TratarDados.classes.utils.GenericReusable as GenericReusab
 #from ID01_2_ConcEst_TratarDados.classes.excel.leitura_depara import ler_todas_planilhas
 from ID01_2_ConcEst_TratarDados.classes.sqlite.manipular_tabelas import ler_todas_planilhas,processar_depara
 from ID01_2_ConcEst_TratarDados.classes.sqlite.config import CAMINHO_ARQUIVO_DEPARA,CAMINHO_BANCO_DADOS
-
-#FIXME Código Exemplo REMOVER
-from ID01_2_ConcEst_TratarDados.classes.chrome.google.Homepage import GoogleHomepage
-from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import Browser
+from datetime import date, timedelta
+# #FIXME Código Exemplo REMOVER
+# from ID01_2_ConcEst_TratarDados.classes.chrome.google.Homepage import GoogleHomepage
+# from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import Browser
 
 class InitAllApplications:
     """
@@ -39,11 +39,15 @@ class InitAllApplications:
         #Ler DEPARA e Popular Tabelas
         processar_depara(caminho_arquivo_depara=CAMINHO_ARQUIVO_DEPARA,caminho_banco_dados=CAMINHO_BANCO_DADOS)
 
-        print()
+        # Subtrai 1 dia da data de hoje
+        ontem = date.today() - timedelta(days=1)
+        
+        # Formata para o padrão brasileiro
+        data_processamento = ontem.strftime("%d/%m/%Y")
 
-        #Criar Fila
-        info_adicional = {'valor_pesquisa':'cotação atual do dólar'}
-        QueueManager.insert_new_queue_item(referencia=str(1),inf_adicional=info_adicional)
+        #Criar Fila Unica
+        info_adicional = {'Adquirentes':'todos os adquirentes'}
+        QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
 
 
         
@@ -76,9 +80,7 @@ class InitAllApplications:
             try:
                 Log.write_log("Iniciando aplicativos, tentativa " + (tentativa+1).__str__())
  
-                InitAllSettings.initiate_web_manipulator(headless=False, browser_escolhido=Browser.CHROME)
-                #GoogleHomepage.open_google_website('www.google.com.br')
-                
+
             except BusinessRuleException as err:
                 raise err
             except Exception as err:
