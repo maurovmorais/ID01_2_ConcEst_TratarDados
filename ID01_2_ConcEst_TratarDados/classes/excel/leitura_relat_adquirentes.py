@@ -26,6 +26,7 @@ Uso típico (dentro do process do projeto):
 """
 
 from __future__ import annotations
+from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAllSettings
 
 import logging
 import re
@@ -42,9 +43,7 @@ logger = logging.getLogger(__name__)
 # Configuração
 # ---------------------------------------------------------------------
 
-DIRETORIO_ARQUIVOS_PADRAO = Path(
-    r"C:\Armazenamento\ID01_1_ConcEst_Download\Arquivos_Baixados"
-)
+DIRETORIO_ARQUIVOS_PADRAO = Path(InitAllSettings.config['arquivos_baixados'])
 
 EXTENSOES_SUPORTADAS = (".csv", ".xlsx", ".xls")
 
@@ -92,6 +91,7 @@ MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
         "coluna_bandeira": "Bandeira",
         "coluna_valor_lancamento": "Valor bruto",
         "coluna_valor_taxa": "Taxa/tarifa",
+        "limpar_documento_empresa": True,
     },
     "greenpass": {
         "nome_adquirente": "Greenpass",
@@ -434,11 +434,17 @@ class LeitorRelatoriosAdquirentes:
         """
         quantidade_linhas = len(dados_originais)
         dados_normalizados = pd.DataFrame(index=range(quantidade_linhas))
-
         dados_normalizados["adquirente"] = configuracao["nome_adquirente"]
-        dados_normalizados["empresa"] = self._obter_coluna(
+        coluna_empresa = self._obter_coluna(
             dados_originais, configuracao["coluna_empresa"]
         )
+        if configuracao.get("limpar_documento_empresa"):
+            coluna_empresa = self._limpar_documento(coluna_empresa)
+        dados_normalizados["empresa"] = coluna_empresa
+        # dados_normalizados["adquirente"] = configuracao["nome_adquirente"]
+        # dados_normalizados["empresa"] = self._obter_coluna(
+        #     dados_originais, configuracao["coluna_empresa"]
+        #)
         dados_normalizados["data_processamento"] = self._converter_data(
             self._obter_coluna(
                 dados_originais, configuracao["coluna_data_processamento"]
@@ -499,6 +505,29 @@ class LeitorRelatoriosAdquirentes:
             return pd.Series([None] * len(dados), index=dados.index)
         return dados[nome_coluna]
 
+    @staticmethod
+    def _limpar_documento(valores: pd.Series) -> pd.Series:
+        """Mantém apenas os dígitos de um CPF/CNPJ formatado.
+
+        Remove ".", "/", "-" e qualquer outro caractere não numérico
+        (ex.: "13.008.381/0002-88" -> "13008381000288").
+
+        Args:
+            valores: série com o documento formatado.
+
+        Returns:
+            Série com apenas os dígitos, ou None quando ausente.
+        """
+
+        def _limpar_um_valor(valor: object) -> Optional[str]:
+            if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+                return None
+            apenas_digitos = re.sub(r"[^0-9]", "", str(valor).strip())
+            return apenas_digitos or None
+
+        return valores.apply(_limpar_um_valor)
+    
+    
     @staticmethod
     def _converter_valor(valores: pd.Series) -> pd.Series:
         """Converte valores monetários em formato brasileiro para float.

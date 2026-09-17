@@ -22,6 +22,7 @@ Uso típico (dentro do process do projeto):
 """
 
 from __future__ import annotations
+from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAllSettings
 
 import logging
 import sqlite3
@@ -35,9 +36,7 @@ logger = logging.getLogger(__name__)
 # Configuração
 # ---------------------------------------------------------------------
 
-CAMINHO_BANCO_PADRAO = Path(
-    r"C:\Armazenamento\ID01_2_ConcEst_TratarDados\Banco Dados\banco_dados.db"
-)
+CAMINHO_BANCO_PADRAO = Path(InitAllSettings.config['CaminhoBancoSqlite'])
 
 NOME_TABELA_DESTINO = "tbl_aux_dados"
 
