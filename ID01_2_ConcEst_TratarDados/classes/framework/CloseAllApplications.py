@@ -3,8 +3,7 @@
 from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAllSettings
 from ID01_2_ConcEst_TratarDados.classes.utils.Log import Log, LogLevel, ErrorType
 from ID01_2_ConcEst_TratarDados.classes.utils.Exceptions import BusinessRuleException
-#FIXME Código Exemplo REMOVER
-from ID01_2_ConcEst_TratarDados.classes.chrome.google.Homepage import GoogleHomepage
+
 
 # Imports dos pacotes externos
 
@@ -42,10 +41,6 @@ class CloseAllApplications:
                 Log.write_log("Finalizando todos os processos, tentativa " + (tentativa+1).__str__())
                 #Insira aqui seu código para fechar os aplicativos
                 
-                #FIXME Código Exemplo REMOVER
-
-                GoogleHomepage.close_google_website()
-
 
             except BusinessRuleException as err:
                 Log.write_log(mensagem_log="Erro de negócio: " + str(err), 

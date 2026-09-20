@@ -26,8 +26,13 @@ Uso típico (dentro do process do projeto):
 """
 
 from __future__ import annotations
-from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAllSettings
 
+from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import (
+    InitAllSettings,
+)
+
+import csv
+import io
 import logging
 import re
 import warnings
@@ -43,13 +48,20 @@ logger = logging.getLogger(__name__)
 # Configuração
 # ---------------------------------------------------------------------
 
-DIRETORIO_ARQUIVOS_PADRAO = Path(InitAllSettings.config['arquivos_baixados'])
+DIRETORIO_ARQUIVOS_PADRAO = Path(InitAllSettings.config["arquivos_baixados"])
 
 EXTENSOES_SUPORTADAS = (".csv", ".xlsx", ".xls")
 
 # Ordem de tentativa de codificação para arquivos .csv. latin1 nunca
 # falha (mapeia qualquer byte), por isso fica como última opção.
 CODIFICACOES_CSV = ("utf-8", "utf-8-sig", "cp1252", "latin1")
+
+# Separadores testados para arquivos .csv, na ordem de tentativa. O
+# separador correto é confirmado batendo com o cabeçalho esperado do
+# adquirente (ver "colunas_identificacao_cabecalho"), em vez de
+# adivinhado — relatórios com texto de preâmbulo (datas, frases com
+# vírgula) podem enganar uma detecção automática de separador.
+SEPARADORES_CSV = (",", ";", "\t", "|")
 
 # Quantidade máxima de linhas iniciais varridas em busca da linha de
 # cabeçalho real do relatório (alguns adquirentes exportam linhas de
@@ -76,6 +88,10 @@ COLUNAS_TABELA_DESTINO = (
 MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
     "conectcar": {
         "nome_adquirente": "ConectCar",
+        "colunas_identificacao_cabecalho": (
+            "Data do Processamento",
+            "Hora do Processamento",
+        ),
         "coluna_empresa": "Conveniado",
         "coluna_data_processamento": "Data do Processamento",
         "coluna_forma_pagto": None,
@@ -85,16 +101,20 @@ MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
     },
     "cielo": {
         "nome_adquirente": "Cielo",
+        "colunas_identificacao_cabecalho": ("Data da venda", "Hora da venda"),
         "coluna_empresa": "CPF/CNPJ do estabelecimento",
         "coluna_data_processamento": "Data da venda",
         "coluna_forma_pagto": "Forma de pagamento",
         "coluna_bandeira": "Bandeira",
         "coluna_valor_lancamento": "Valor bruto",
         "coluna_valor_taxa": "Taxa/tarifa",
+        # A Cielo grava o CPF/CNPJ formatado (ex.: "13.008.381/0002-88");
+        # mantém-se só os dígitos.
         "limpar_documento_empresa": True,
     },
     "greenpass": {
         "nome_adquirente": "Greenpass",
+        "colunas_identificacao_cabecalho": ("DATA ESTADIA", "DATA RECEBIMENTO"),
         "coluna_empresa": "CONVENIADO",
         "coluna_data_processamento": "DATA ESTADIA",
         "coluna_forma_pagto": None,
@@ -104,6 +124,7 @@ MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
     },
     "semparar": {
         "nome_adquirente": "SemParar",
+        "colunas_identificacao_cabecalho": ("credenciado", "valor_total"),
         "coluna_empresa": "credenciado",
         "coluna_data_processamento": "data_periodo",
         "coluna_forma_pagto": None,
@@ -113,6 +134,7 @@ MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
     },
     "veloe": {
         "nome_adquirente": "Veloe",
+        "colunas_identificacao_cabecalho": ("CNPJ", "Estabelecimento"),
         "coluna_empresa": "Estabelecimento",
         "coluna_data_processamento": "Data Saída",
         "coluna_forma_pagto": "Tipo",
@@ -224,7 +246,12 @@ class LeitorRelatoriosAdquirentes:
     # -----------------------------------------------------------------
 
     def _processar_adquirente(self, chave_adquirente: str) -> pd.DataFrame:
-        """Localiza, lê e normaliza o relatório de um adquirente.
+        """Localiza, lê e normaliza o(s) relatório(s) de um adquirente.
+
+        Um adquirente pode ter mais de um arquivo no diretório (ex.:
+        Cielo, que exporta um .csv por período em
+        "Vendas_cielo_historico_..."); todos os arquivos encontrados
+        são lidos e consolidados antes da normalização.
 
         Args:
             chave_adquirente: chave em MAPEAMENTO_ADQUIRENTES
@@ -238,29 +265,54 @@ class LeitorRelatoriosAdquirentes:
                 adquirente for encontrado no diretório configurado.
         """
         configuracao = MAPEAMENTO_ADQUIRENTES[chave_adquirente]
-        caminho_arquivo = self._localizar_arquivo(chave_adquirente)
-        dados_brutos = self._ler_arquivo(caminho_arquivo)
-        dados_originais = self._extrair_tabela(dados_brutos, configuracao)
+        caminhos_arquivos = self._localizar_arquivos(chave_adquirente)
+
+        logger.info(
+            "%d arquivo(s) encontrado(s) para o adquirente '%s': %s",
+            len(caminhos_arquivos),
+            configuracao["nome_adquirente"],
+            ", ".join(caminho.name for caminho in caminhos_arquivos),
+        )
+
+        tabelas_extraidas = []
+        for caminho_arquivo in caminhos_arquivos:
+            dados_brutos = self._ler_arquivo(caminho_arquivo, configuracao)
+            tabelas_extraidas.append(
+                self._extrair_tabela(dados_brutos, configuracao)
+            )
+
+        if len(tabelas_extraidas) == 1:
+            dados_originais = tabelas_extraidas[0]
+        else:
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=".*empty or all-NA entries.*",
+                    category=FutureWarning,
+                )
+                dados_originais = pd.concat(tabelas_extraidas, ignore_index=True)
 
         return self._montar_dataframe_padrao(dados_originais, configuracao)
 
-    def _localizar_arquivo(self, chave_adquirente: str) -> Path:
-        """Procura no diretório de arquivos o relatório do adquirente.
+    def _localizar_arquivos(self, chave_adquirente: str) -> list[Path]:
+        """Procura no diretório de arquivos todos os relatórios do adquirente.
 
         A identificação é feita pelo nome do arquivo conter a chave do
         adquirente, ignorando maiúsculas/minúsculas e caracteres não
-        alfanuméricos (ex.: "SEM_PARAR.xlsx" casa com a chave
-        "semparar").
+        alfanuméricos (ex.: "SEM_PARAR.xlsx" e "Vendas_cielo_historico_1.csv"
+        casam com as chaves "semparar" e "cielo", respectivamente).
+        Um mesmo adquirente pode ter vários arquivos compatíveis — todos
+        são retornados, em ordem alfabética.
 
         Args:
             chave_adquirente: trecho esperado no nome do arquivo.
 
         Returns:
-            Caminho do primeiro arquivo compatível encontrado.
+            Lista (ordenada) dos caminhos dos arquivos compatíveis.
 
         Raises:
-            ArquivoAdquirenteNaoEncontrado: se não houver arquivo
-                compatível no diretório.
+            ArquivoAdquirenteNaoEncontrado: se não houver nenhum
+                arquivo compatível no diretório.
         """
         if not self.diretorio_arquivos.exists():
             raise ArquivoAdquirenteNaoEncontrado(
@@ -268,16 +320,20 @@ class LeitorRelatoriosAdquirentes:
             )
 
         chave_normalizada = self._normalizar_nome(chave_adquirente)
+        arquivos_encontrados = []
         for caminho in sorted(self.diretorio_arquivos.iterdir()):
             nome_normalizado = self._normalizar_nome(caminho.stem)
             extensao_suportada = caminho.suffix.lower() in EXTENSOES_SUPORTADAS
             if chave_normalizada in nome_normalizado and extensao_suportada:
-                return caminho
+                arquivos_encontrados.append(caminho)
 
-        raise ArquivoAdquirenteNaoEncontrado(
-            f"Nenhum arquivo de '{chave_adquirente}' encontrado em "
-            f"{self.diretorio_arquivos}"
-        )
+        if not arquivos_encontrados:
+            raise ArquivoAdquirenteNaoEncontrado(
+                f"Nenhum arquivo de '{chave_adquirente}' encontrado em "
+                f"{self.diretorio_arquivos}"
+            )
+
+        return arquivos_encontrados
 
     @staticmethod
     def _normalizar_nome(texto: str) -> str:
@@ -292,7 +348,9 @@ class LeitorRelatoriosAdquirentes:
         """
         return re.sub(r"[^a-z0-9]", "", texto.lower())
 
-    def _ler_arquivo(self, caminho_arquivo: Path) -> pd.DataFrame:
+    def _ler_arquivo(
+        self, caminho_arquivo: Path, configuracao: dict
+    ) -> pd.DataFrame:
         """Lê um arquivo .csv, .xlsx ou .xls como DataFrame bruto.
 
         A leitura é feita sem assumir qual linha é o cabeçalho, pois
@@ -302,40 +360,112 @@ class LeitorRelatoriosAdquirentes:
 
         Args:
             caminho_arquivo: caminho do arquivo a ser lido.
+            configuracao: entrada correspondente em
+                MAPEAMENTO_ADQUIRENTES (usada, no caso de .csv, para
+                confirmar qual separador é o correto).
 
         Returns:
             DataFrame bruto (sem cabeçalho definido, tudo como texto).
 
         Raises:
             ValueError: se a extensão do arquivo não for suportada, ou
-                se nenhuma codificação testada conseguir ler o .csv.
+                se não for possível identificar codificação/separador
+                do .csv.
         """
         extensao = caminho_arquivo.suffix.lower()
 
         if extensao == ".csv":
-            ultimo_erro: Optional[UnicodeDecodeError] = None
-            for codificacao in CODIFICACOES_CSV:
-                try:
-                    return pd.read_csv(
-                        caminho_arquivo,
-                        sep=None,
-                        engine="python",
-                        header=None,
-                        dtype=str,
-                        encoding=codificacao,
-                    )
-                except UnicodeDecodeError as erro:
-                    ultimo_erro = erro
-                    continue
-            raise ValueError(
-                f"Não foi possível decodificar {caminho_arquivo.name} "
-                f"com nenhuma das codificações testadas {CODIFICACOES_CSV}"
-            ) from ultimo_erro
+            return self._ler_csv(caminho_arquivo, configuracao)
 
         if extensao in (".xlsx", ".xls"):
             return pd.read_excel(caminho_arquivo, header=None, dtype=str)
 
         raise ValueError(f"Extensão não suportada: {extensao}")
+
+    def _ler_csv(self, caminho_arquivo: Path, configuracao: dict) -> pd.DataFrame:
+        """Lê um .csv testando codificação e separador até achar o certo.
+
+        Em vez de deixar o separador ser "adivinhado" (o que falha em
+        relatórios com texto de preâmbulo contendo vírgulas, datas
+        etc.), cada combinação de codificação/separador é validada
+        contra o cabeçalho esperado do adquirente
+        (``colunas_identificacao_cabecalho``) antes de ser aceita. A
+        leitura usa o módulo ``csv`` da biblioteca padrão, que não
+        exige que todas as linhas tenham a mesma quantidade de
+        campos — diferente do parser do pandas.
+
+        Args:
+            caminho_arquivo: caminho do arquivo .csv.
+            configuracao: entrada correspondente em
+                MAPEAMENTO_ADQUIRENTES.
+
+        Returns:
+            DataFrame bruto (sem cabeçalho definido, tudo como texto),
+            com todas as linhas preenchidas até a maior quantidade de
+            campos encontrada no arquivo.
+
+        Raises:
+            ValueError: se nenhuma combinação de codificação e
+                separador testada encontrar o cabeçalho esperado.
+        """
+        coluna_1_esperada, coluna_2_esperada = configuracao[
+            "colunas_identificacao_cabecalho"
+        ]
+        coluna_1_esperada = coluna_1_esperada.strip()
+        coluna_2_esperada = coluna_2_esperada.strip()
+
+        ultimo_erro: Optional[UnicodeDecodeError] = None
+        for codificacao in CODIFICACOES_CSV:
+            try:
+                texto = caminho_arquivo.read_text(encoding=codificacao)
+            except UnicodeDecodeError as erro:
+                ultimo_erro = erro
+                continue
+
+            for separador in SEPARADORES_CSV:
+                linhas = list(csv.reader(io.StringIO(texto), delimiter=separador))
+                limite = min(LIMITE_LINHAS_BUSCA_CABECALHO, len(linhas))
+                cabecalho_bate = any(
+                    self._normalizar_celula_cabecalho(
+                        linhas[indice][0] if len(linhas[indice]) > 0 else None
+                    )
+                    == coluna_1_esperada
+                    and self._normalizar_celula_cabecalho(
+                        linhas[indice][1] if len(linhas[indice]) > 1 else None
+                    )
+                    == coluna_2_esperada
+                    for indice in range(limite)
+                )
+                if cabecalho_bate:
+                    return self._construir_dataframe_bruto(linhas)
+
+        raise ValueError(
+            f"Não foi possível ler {caminho_arquivo.name}: nenhuma "
+            "combinação de codificação/separador testada encontrou o "
+            f"cabeçalho esperado ('{coluna_1_esperada}', "
+            f"'{coluna_2_esperada}')."
+        ) from ultimo_erro
+
+    @staticmethod
+    def _construir_dataframe_bruto(linhas: list[list[str]]) -> pd.DataFrame:
+        """Monta um DataFrame a partir de linhas de tamanhos variados.
+
+        Cada linha é completada com None até a maior quantidade de
+        campos encontrada no arquivo, para todas terem o mesmo
+        tamanho (exigência do pandas).
+
+        Args:
+            linhas: linhas já separadas em campos (via csv.reader).
+
+        Returns:
+            DataFrame bruto, sem cabeçalho definido.
+        """
+        maior_quantidade_campos = max((len(linha) for linha in linhas), default=0)
+        linhas_preenchidas = [
+            linha + [None] * (maior_quantidade_campos - len(linha))
+            for linha in linhas
+        ]
+        return pd.DataFrame(linhas_preenchidas)
 
     def _extrair_tabela(
         self, dados_brutos: pd.DataFrame, configuracao: dict
@@ -343,10 +473,12 @@ class LeitorRelatoriosAdquirentes:
         """Localiza a linha de cabeçalho real e recorta a tabela.
 
         Alguns relatórios trazem linhas de preâmbulo (dados do
-        usuário, filtros aplicados etc.) antes da tabela de dados.
-        Esta função varre as primeiras linhas do arquivo em busca da
-        que contém todos os nomes de coluna esperados para o
-        adquirente e usa essa linha como cabeçalho.
+        usuário, filtros aplicados etc.) antes da tabela de dados, e
+        cada adquirente pode começar em uma linha diferente. Esta
+        função varre as primeiras linhas do arquivo em busca da que
+        tem, nas duas primeiras posições, os nomes de coluna
+        esperados (ver "colunas_identificacao_cabecalho" em
+        MAPEAMENTO_ADQUIRENTES) e usa essa linha como cabeçalho.
 
         Args:
             dados_brutos: DataFrame lido sem cabeçalho definido.
@@ -360,23 +492,26 @@ class LeitorRelatoriosAdquirentes:
             ValueError: se a linha de cabeçalho não for encontrada
                 dentro do limite de linhas varridas.
         """
-        colunas_esperadas = {
-            valor
-            for chave, valor in configuracao.items()
-            if chave.startswith("coluna_") and valor is not None
-        }
+        coluna_1_esperada, coluna_2_esperada = configuracao[
+            "colunas_identificacao_cabecalho"
+        ]
 
         limite = min(LIMITE_LINHAS_BUSCA_CABECALHO, len(dados_brutos))
         for indice_linha in range(limite):
-            valores_da_linha = {
-                str(valor).strip()
-                for valor in dados_brutos.iloc[indice_linha]
-                if pd.notna(valor)
-            }
-            if colunas_esperadas.issubset(valores_da_linha):
+            linha = dados_brutos.iloc[indice_linha]
+            valor_coluna_1 = self._normalizar_celula_cabecalho(
+                linha.iloc[0] if len(linha) > 0 else None
+            )
+            valor_coluna_2 = self._normalizar_celula_cabecalho(
+                linha.iloc[1] if len(linha) > 1 else None
+            )
+            if (
+                valor_coluna_1 == coluna_1_esperada.strip()
+                and valor_coluna_2 == coluna_2_esperada.strip()
+            ):
                 tabela = dados_brutos.iloc[indice_linha + 1 :].copy()
                 tabela.columns = self._deduplicar_nomes_coluna(
-                    str(valor).strip() if pd.notna(valor) else ""
+                    self._normalizar_celula_cabecalho(valor)
                     for valor in dados_brutos.iloc[indice_linha]
                 )
                 return tabela.reset_index(drop=True)
@@ -384,9 +519,27 @@ class LeitorRelatoriosAdquirentes:
         raise ValueError(
             "Linha de cabeçalho não encontrada nas primeiras "
             f"{limite} linhas do arquivo do adquirente "
-            f"'{configuracao['nome_adquirente']}'. Colunas esperadas: "
-            f"{sorted(colunas_esperadas)}"
+            f"'{configuracao['nome_adquirente']}'. Esperava as colunas "
+            f"'{coluna_1_esperada}' e '{coluna_2_esperada}' nas duas "
+            "primeiras posições."
         )
+
+    @staticmethod
+    def _normalizar_celula_cabecalho(valor: object) -> str:
+        """Normaliza uma célula para comparação de cabeçalho.
+
+        Remove espaços nas pontas e o caractere BOM ("\\ufeff") que
+        alguns arquivos .csv trazem na primeira célula.
+
+        Args:
+            valor: valor bruto da célula (pode ser NaN).
+
+        Returns:
+            Texto normalizado, ou string vazia quando ausente.
+        """
+        if pd.isna(valor):
+            return ""
+        return str(valor).strip().lstrip("\ufeff")
 
     @staticmethod
     def _deduplicar_nomes_coluna(nomes) -> list[str]:
@@ -434,17 +587,16 @@ class LeitorRelatoriosAdquirentes:
         """
         quantidade_linhas = len(dados_originais)
         dados_normalizados = pd.DataFrame(index=range(quantidade_linhas))
+
         dados_normalizados["adquirente"] = configuracao["nome_adquirente"]
+
         coluna_empresa = self._obter_coluna(
             dados_originais, configuracao["coluna_empresa"]
         )
         if configuracao.get("limpar_documento_empresa"):
             coluna_empresa = self._limpar_documento(coluna_empresa)
         dados_normalizados["empresa"] = coluna_empresa
-        # dados_normalizados["adquirente"] = configuracao["nome_adquirente"]
-        # dados_normalizados["empresa"] = self._obter_coluna(
-        #     dados_originais, configuracao["coluna_empresa"]
-        #)
+
         dados_normalizados["data_processamento"] = self._converter_data(
             self._obter_coluna(
                 dados_originais, configuracao["coluna_data_processamento"]
@@ -526,8 +678,7 @@ class LeitorRelatoriosAdquirentes:
             return apenas_digitos or None
 
         return valores.apply(_limpar_um_valor)
-    
-    
+
     @staticmethod
     def _converter_valor(valores: pd.Series) -> pd.Series:
         """Converte valores monetários em formato brasileiro para float.
