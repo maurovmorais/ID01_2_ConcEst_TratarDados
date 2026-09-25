@@ -142,6 +142,16 @@ MAPEAMENTO_ADQUIRENTES: dict[str, dict] = {
         "coluna_valor_lancamento": "Valor Transação",
         "coluna_valor_taxa": "Valor MDR",
     },
+    "bradesco": {
+        "nome_adquirente": "Bradesco",
+        "colunas_identificacao_cabecalho": ("data_arquivo_ret", "data_movimento"),
+        "coluna_empresa": "inscricao_empresa",
+        "coluna_data_processamento": "data_lancamento",
+        "coluna_forma_pagto": "historico",
+        "coluna_bandeira": None,
+        "coluna_valor_lancamento": "valor_assinado",
+        "coluna_valor_taxa": None,
+    },
 }
 
 
@@ -185,6 +195,10 @@ class LeitorRelatoriosAdquirentes:
         """Lê e normaliza o relatório da Veloe."""
         return self._processar_adquirente("veloe")
 
+    def bradesco(self) -> pd.DataFrame:
+        """Lê e normaliza o relatório da Veloe."""
+        return self._processar_adquirente("bradesco")
+
     # -----------------------------------------------------------------
     # Orquestração da extração
     # -----------------------------------------------------------------
@@ -204,6 +218,7 @@ class LeitorRelatoriosAdquirentes:
             "greenpass": self.greenpass,
             "semparar": self.semparar,
             "veloe": self.veloe,
+            "bradesco": self.bradesco,
         }
 
         dataframes_processados: list[pd.DataFrame] = []
