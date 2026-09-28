@@ -145,3 +145,33 @@ class GerenciadorSQLite:
             "Tabela '%s': %d linha(s) inserida(s).", nome_tabela, len(valores)
         )
         return len(valores)
+
+
+    def criar_conexao(caminho_banco) -> sqlite3.Connection:
+        """Cria e retorna uma conexão com o banco SQLite.
+
+        Args:
+            caminho_banco: Caminho do arquivo do banco de dados.
+
+        Returns:
+            Conexão SQLite aberta. Quem chama é responsável por fechá-la.
+
+        Raises:
+            FileNotFoundError: Se o arquivo do banco não existir.
+            sqlite3.Error: Se ocorrer falha ao conectar.
+        """
+        caminho = Path(caminho_banco)
+
+        # Evita que o sqlite3 crie um banco vazio por engano caso o caminho esteja errado
+        if not caminho.is_file():
+            logger.error("Banco de dados não encontrado: %s", caminho)
+            raise FileNotFoundError(f"Banco de dados não encontrado: {caminho}")
+
+        try:
+            conexao = sqlite3.connect(caminho)
+        except sqlite3.Error:
+            logger.exception("Falha ao conectar ao banco de dados: %s", caminho)
+            raise
+
+        logger.info("Conexão com o banco estabelecida: %s", caminho)
+        return conexao

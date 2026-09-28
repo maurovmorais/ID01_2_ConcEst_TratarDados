@@ -5,13 +5,15 @@ from ID01_2_ConcEst_TratarDados.classes.utils.Log import Log, LogLevel, ErrorTyp
 from ID01_2_ConcEst_TratarDados.classes.utils.Exceptions import BusinessRuleException
 from ID01_2_ConcEst_TratarDados.classes.queue.QueueManager import QueueManager
 import ID01_2_ConcEst_TratarDados.classes.utils.GenericReusable as GenericReusable
-#from ID01_2_ConcEst_TratarDados.classes.excel.leitura_depara import ler_todas_planilhas
 from ID01_2_ConcEst_TratarDados.classes.sqlite.manipular_tabelas import ler_todas_planilhas,processar_depara
 from ID01_2_ConcEst_TratarDados.classes.sqlite.config import CAMINHO_ARQUIVO_DEPARA,CAMINHO_BANCO_DADOS
+from ID01_2_ConcEst_TratarDados.classes.sqlite.manipular_tabelas import atualizar_dados_estruturados
+from ID01_2_ConcEst_TratarDados.classes.sqlite.sqlite import GerenciadorSQLite
+from ID01_2_ConcEst_TratarDados.classes.excel.leitura_relat_adquirentes import (LeitorRelatoriosAdquirentes,)
+from ID01_2_ConcEst_TratarDados.classes.sqlite.gravador_tbl_aux_dados import (GravadorTblAuxDados,)
 from datetime import date, timedelta
-# #FIXME Código Exemplo REMOVER
-# from ID01_2_ConcEst_TratarDados.classes.chrome.google.Homepage import GoogleHomepage
-# from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import Browser
+from contextlib import closing
+
 
 class InitAllApplications:
     """
@@ -36,6 +38,7 @@ class InitAllApplications:
 
         Parâmetros:
         """
+        
         #Ler DEPARA e Popular Tabelas
         processar_depara(caminho_arquivo_depara=CAMINHO_ARQUIVO_DEPARA,caminho_banco_dados=CAMINHO_BANCO_DADOS)
 
@@ -45,12 +48,25 @@ class InitAllApplications:
         # Formata para o padrão brasileiro
         data_processamento = ontem.strftime("%d/%m/%Y")
 
+        #Ler os arquivos dos Adquirentes
+        leitor = LeitorRelatoriosAdquirentes()
+        dados_consolidados = leitor.processar_todos()
+
+        #Salvar na tabela tbl_aux_dados
+        gravador = GravadorTblAuxDados()
+        gravador.gravar_tbl_aux_dados(dados_consolidados)
+
+        #Popular tabela tbl_dados_estruturados com dados atualizados
+        with closing(GerenciadorSQLite.criar_conexao(CAMINHO_BANCO_DADOS)) as conexao:
+            atualizar_dados_estruturados(conexao)
+
         #Criar Fila Unica
-        info_adicional = {'Adquirentes':'todos os adquirentes'}
-        QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
+        lista_adquirentes = ['ConectCar','Cielo','Greenpass','SemParar','Veloe','Bradesco']
+        for adquirentes in lista_adquirentes:
+            info_adicional = {'Adquirentes':adquirentes}
+            QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
 
 
-        
     @classmethod
     def execute(cls, first_run=False):
         """

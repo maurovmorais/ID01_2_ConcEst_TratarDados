@@ -8,6 +8,7 @@ utilizando os nomes de tabela definidos em 'config.NOME_TABELAS'.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from ID01_2_ConcEst_TratarDados.classes.sqlite.sqlite import GerenciadorSQLite
@@ -15,6 +16,10 @@ from ID01_2_ConcEst_TratarDados.classes.sqlite.config import CAMINHO_BANCO_DADOS
 from ID01_2_ConcEst_TratarDados.classes.excel.leitura_depara import ler_todas_planilhas
 
 logger = logging.getLogger(__name__)
+
+#caminho do Script
+ROOT_DIR = Path(__file__).parent.parent.parent
+CAMINHO_SQL_DADOS_ESTRUTURADOS = Path(ROOT_DIR) / "resources" / "script_dados_estruturados" / "dados_estruturados.sql"
 
 # Colunas (nome -> tipo SQL) de cada tabela, na mesma ordem das colunas
 # da planilha correspondente no DEPARA.
@@ -121,9 +126,35 @@ def processar_depara(
             gravar_planilha_no_banco(db, nome_planilha, linhas)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
-    processar_depara()
+def atualizar_dados_estruturados(conexao):
+    """Limpa e repopula a tabela dados_estruturados com os dados da execução atual."""
+    cursor = conexao.cursor()
+    cursor.execute("DELETE FROM tbl_dados_estruturados;")
+    cursor.execute(ler_script_sql(CAMINHO_SQL_DADOS_ESTRUTURADOS ))  
+    conexao.commit()
+
+def ler_script_sql(caminho: Path | str) -> str:
+        """Lê o conteúdo de um arquivo .sql e o retorna como texto.
+
+        Args:
+            caminho: Caminho do arquivo .sql.
+
+        Returns:
+            Conteúdo do arquivo.
+
+        Raises:
+            FileNotFoundError: Se o arquivo não existir.
+        """
+        caminho = Path(caminho)
+        if not caminho.is_file():
+            logger.error("Arquivo SQL não encontrado: %s", caminho)
+            raise FileNotFoundError(f"Arquivo SQL não encontrado: {caminho}")
+        return caminho.read_text(encoding="utf-8")
+
+
+# if __name__ == "__main__":
+#     logging.basicConfig(
+#         level=logging.INFO,
+#         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+#     )
+#     atualizar_dados_estruturados(conexao)

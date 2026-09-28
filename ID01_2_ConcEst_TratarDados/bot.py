@@ -1,13 +1,6 @@
 """
 VERSÃO FRAMEWORK: 1.0.0
 
-AVISO:
-
-Certifique-se de instalar o bot com `pip install -e .` para obter todas as dependências
-em seu ambiente Python.
-
-Além disso, se você estiver usando PyCharm ou outro IDE, certifique-se de usar o MESMO interpretador Python
-como seu IDE.
 """
 # Imports dos módulos internos do projeto
 # Carrega o InitAllSettings - Precisa ser o primeiro a ser carregado
