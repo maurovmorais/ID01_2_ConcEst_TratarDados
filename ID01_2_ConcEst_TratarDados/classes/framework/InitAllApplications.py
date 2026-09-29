@@ -55,6 +55,9 @@ class InitAllApplications:
         #Ler os arquivos dos Adquirentes
         leitor = LeitorRelatoriosAdquirentes()
         dados_consolidados = leitor.processar_todos()
+        
+        #Retira os espaços da string
+        dados_consolidados["empresa"] = dados_consolidados["empresa"].str.strip()
 
         #Salvar na tabela tbl_aux_dados
         gravador = GravadorTblAuxDados()

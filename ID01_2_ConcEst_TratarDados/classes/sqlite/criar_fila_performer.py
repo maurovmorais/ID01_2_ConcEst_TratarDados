@@ -26,23 +26,22 @@ QUERY_ADQUIRENTES_FORMAS = """
 """
 
 QUERY_TOTAL_POR_FORMA = """
-    SELECT adquirente,
-           "Nomenclatura SoftCase" AS nomenclatura,
-           bandeira,
-           valor_taxa,
-           taxa_adquirente,
-           forma_pagto,
-           SUM(valor_lancamento) AS total
-    FROM tbl_dados_estruturados
-    WHERE adquirente = :adquirente
-      AND forma_pagto = :forma_pagto
-      AND "Nomenclatura SoftCase" IS NOT NULL
-      AND TRIM("Nomenclatura SoftCase") <> ''
-    GROUP BY adquirente, "Nomenclatura SoftCase", bandeira, valor_taxa, taxa_adquirente, forma_pagto
-    HAVING SUM(valor_lancamento) IS NOT NULL
-    AND SUM(valor_lancamento) <> 0
-    ORDER BY "Nomenclatura SoftCase", bandeira;
-
+ SELECT adquirente,
+       "Nomenclatura SoftCase" AS nomenclatura,
+       bandeira,
+       ROUND(SUM(valor_taxa), 2) AS valor_taxa,
+       taxa_adquirente,
+       forma_pagto,
+       ROUND(SUM(valor_lancamento), 2) AS total
+FROM tbl_dados_estruturados
+WHERE adquirente = :adquirente
+AND forma_pagto = :forma_pagto
+AND "Nomenclatura SoftCase" IS NOT NULL
+AND TRIM("Nomenclatura SoftCase") <> ''
+GROUP BY adquirente, "Nomenclatura SoftCase", bandeira, taxa_adquirente, forma_pagto
+HAVING SUM(valor_lancamento) IS NOT NULL
+AND ROUND(SUM(valor_lancamento), 2) <> 0
+ORDER BY "Nomenclatura SoftCase", bandeira;
 
 """
 
