@@ -152,9 +152,4 @@ def ler_script_sql(caminho: Path | str) -> str:
         return caminho.read_text(encoding="utf-8")
 
 
-# if __name__ == "__main__":
-#     logging.basicConfig(
-#         level=logging.INFO,
-#         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-#     )
-#     atualizar_dados_estruturados(conexao)
+

@@ -4,6 +4,7 @@ INSERT INTO tbl_dados_estruturados (
     taxa_adquirente, data_atualizacao, ID_UNICO, "Razao Social", CNPJ,
     ultima_atualizacao
 )
+
 WITH base AS (
     SELECT 
         emp."Nomenclatura SoftCase" AS nomenclatura_softcase,
@@ -17,6 +18,7 @@ WITH base AS (
             WHEN aux.forma_pagto IS NULL
                  AND aux.adquirente IN ('ConectCar', 'Greenpass', 'SemParar', 'Veloe')
             THEN 'TAG'
+            WHEN aux.forma_pagto IN ('Débito à vista', 'Débito pré-pago') THEN 'DEBITO'
             ELSE aux.forma_pagto
         END AS forma_pagto,
         CASE
@@ -41,25 +43,25 @@ WITH base AS (
         emp.ID_UNICO,
         emp."Razao Social" AS razao_social,
         emp.CNPJ
-    FROM tbl_empresas as emp
-    INNER JOIN tbl_aux_dados as aux
-    ON aux.empresa = emp.Cielo
-    OR aux.empresa = emp.Veloe
-    OR aux.empresa = emp.SemParar
-    OR aux.empresa = emp.Greenpass
-    OR aux.empresa = emp.ConectCar
-    OR aux.empresa = emp.Bradesco
-    LEFT JOIN tbl_TaxaAdquirentes as tax
-    ON tax."Sigla Empresa" = emp.SIGLA
-    LEFT JOIN tbl_TaxaCielo as tcielo
-    ON aux.adquirente = 'Cielo'
-    AND tcielo."TAXAS CIELO" = CASE
-        WHEN aux.forma_pagto IN ('Débito à vista', 'Débito pré-pago') THEN 'DÉBITO'
-        WHEN aux.forma_pagto IN ('Crédito à vista', 'Crédito pré-pago') THEN 'CRÉDITO'
-        WHEN aux.forma_pagto = 'Pix' THEN 'PIX'
-        ELSE aux.forma_pagto
-    END
-    AND UPPER(tcielo.Bandeira) = UPPER(aux.bandeira)
+    FROM tbl_empresas AS emp
+    INNER JOIN tbl_aux_dados AS aux
+        ON aux.empresa = emp.Cielo
+        OR aux.empresa = emp.Veloe
+        OR aux.empresa = emp.SemParar
+        OR aux.empresa = emp.Greenpass
+        OR aux.empresa = emp.ConectCar
+        OR aux.empresa = emp.Bradesco
+    LEFT JOIN tbl_TaxaAdquirentes AS tax
+        ON tax."Sigla Empresa" = emp.SIGLA
+    LEFT JOIN tbl_TaxaCielo AS tcielo
+        ON aux.adquirente = 'Cielo'
+        AND tcielo."TAXAS CIELO" = CASE
+            WHEN aux.forma_pagto IN ('Débito à vista', 'Débito pré-pago') THEN 'DÉBITO'
+            WHEN aux.forma_pagto IN ('Crédito à vista', 'Crédito pré-pago') THEN 'CRÉDITO'
+            WHEN aux.forma_pagto = 'Pix' THEN 'PIX'
+            ELSE aux.forma_pagto
+        END
+        AND UPPER(tcielo.Bandeira) = UPPER(aux.bandeira)
     WHERE NOT (aux.adquirente = 'Veloe' AND aux.forma_pagto = 'DEBITO')
 ),
 pix_pairs AS (

@@ -4,6 +4,7 @@ from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAll
 from ID01_2_ConcEst_TratarDados.classes.utils.Log import Log, LogLevel, ErrorType
 from ID01_2_ConcEst_TratarDados.classes.utils.Exceptions import BusinessRuleException
 from ID01_2_ConcEst_TratarDados.classes.queue.QueueManager import QueueManager
+from ID01_2_ConcEst_TratarDados.classes.queue.QueueManagerPerformer import QueueManagerPerformer
 import ID01_2_ConcEst_TratarDados.classes.utils.GenericReusable as GenericReusable
 from ID01_2_ConcEst_TratarDados.classes.sqlite.manipular_tabelas import ler_todas_planilhas,processar_depara
 from ID01_2_ConcEst_TratarDados.classes.sqlite.config import CAMINHO_ARQUIVO_DEPARA,CAMINHO_BANCO_DADOS
@@ -42,6 +43,9 @@ class InitAllApplications:
         #Ler DEPARA e Popular Tabelas
         processar_depara(caminho_arquivo_depara=CAMINHO_ARQUIVO_DEPARA,caminho_banco_dados=CAMINHO_BANCO_DADOS)
 
+        #Abandona fila remanescente
+        QueueManagerPerformer.abandon_queue()
+
         # Subtrai 1 dia da data de hoje
         ontem = date.today() - timedelta(days=1)
         
@@ -61,10 +65,12 @@ class InitAllApplications:
             atualizar_dados_estruturados(conexao)
 
         #Criar Fila Unica
-        lista_adquirentes = ['ConectCar','Cielo','Greenpass','SemParar','Veloe','Bradesco']
-        for adquirentes in lista_adquirentes:
-            info_adicional = {'Adquirentes':adquirentes}
-            QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
+        # lista_adquirentes = ['ConectCar','Cielo','Greenpass','SemParar','Veloe','Bradesco']
+        # for adquirentes in lista_adquirentes:
+        #     info_adicional = {'Adquirentes':adquirentes}
+        #     QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
+        info_adicional = ['ConectCar','Cielo','Greenpass','SemParar','Veloe','Bradesco']
+        QueueManager.insert_new_queue_item(referencia=data_processamento ,inf_adicional=info_adicional)
 
 
     @classmethod

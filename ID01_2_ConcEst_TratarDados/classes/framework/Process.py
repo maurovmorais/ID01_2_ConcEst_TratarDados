@@ -4,12 +4,16 @@ from ID01_2_ConcEst_TratarDados.classes.framework.InitAllSettings import InitAll
 from ID01_2_ConcEst_TratarDados.classes.utils.Log import Log, LogLevel, ErrorType
 from ID01_2_ConcEst_TratarDados.classes.utils.Exceptions import BusinessRuleException
 from ID01_2_ConcEst_TratarDados.classes.framework.GetTransaction import GetTransaction
+from ID01_2_ConcEst_TratarDados.classes.queue.QueueManagerPerformer import QueueManagerPerformer
+from ID01_2_ConcEst_TratarDados.classes.sqlite.criar_fila_performer import criar_fila_performer
 
 # Imports dos pacotes externos
 from time import sleep
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from time import sleep
+from pathlib import Path
+import sqlite3
 
 
 class Process:
@@ -31,28 +35,10 @@ class Process:
         """
         Log.write_log('Process Started')
 
-        adquirente = GetTransaction.queue_item['info_adicionais']['Adquirentes']
-   
-        if adquirente == 'ConectCar':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-     
-        elif adquirente == 'Cielo':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-      
-        elif adquirente == 'Greenpass':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-     
-        elif adquirente == 'SemParar':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-     
-        elif adquirente == 'Bradesco':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-
-        elif adquirente == 'Veloe':
-            Log.write_log(f'Processando adquirente: {adquirente}')
-
-        else:
-            Log.write_log(f'Adquirente: {adquirente} não encontrado')
-
+        #Criar a fila para o performer - Lançamento no site SoftCase
+        Log.write_log('Criando a fila do Performer')
+        caminho_banco = Path(InitAllSettings.config['CaminhoBancoSqlite'])
+        criar_fila_performer(caminho_banco)
 
         Log.write_log('Process Finished')
+
