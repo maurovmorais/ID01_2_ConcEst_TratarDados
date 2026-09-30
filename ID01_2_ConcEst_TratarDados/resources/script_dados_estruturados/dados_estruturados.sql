@@ -19,6 +19,8 @@ WITH base AS (
                  AND aux.adquirente IN ('ConectCar', 'Greenpass', 'SemParar', 'Veloe')
             THEN 'TAG'
             WHEN aux.forma_pagto IN ('Débito à vista', 'Débito pré-pago') THEN 'DEBITO'
+            WHEN aux.adquirente = 'Bradesco'
+                 AND aux.forma_pagto = 'CRED PIX QR CODE DINAMIC' THEN 'PIX'
             ELSE aux.forma_pagto
         END AS forma_pagto,
         CASE
@@ -79,7 +81,7 @@ pix_combined AS (
         cred.empresa,
         cred.SIGLA,
         cred.data_processamento,
-        'CRED PIX QR CODE DINAMIC' AS forma_pagto,
+        'PIX' AS forma_pagto,
         cred.Dia_Comp,
         cred.bandeira,
         (cred.valor_lancamento + dev.valor_lancamento) AS valor_lancamento,
