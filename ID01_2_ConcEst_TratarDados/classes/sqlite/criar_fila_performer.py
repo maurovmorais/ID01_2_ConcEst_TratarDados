@@ -30,6 +30,7 @@ QUERY_TOTAL_POR_FORMA = """
     adquirente,
     "Nomenclatura SoftCase" AS nomenclatura,
     bandeira,
+    Dia_Comp,
     CASE 
         WHEN adquirente IN ('Greenpass', 'SemParar') 
             THEN ROUND(SUM(valor_lancamento) * CAST(REPLACE(taxa_adquirente, ',', '.') AS REAL) / 100, 2)
@@ -113,8 +114,9 @@ def itens_por_forma(
     return [
         {
             "adquirente": linha["adquirente"],
-            "softacase": linha["nomenclatura"],
+            "softcase": linha["nomenclatura"],
             "bandeira": linha["bandeira"],
+            "dias_comp": linha["Dia_Comp"],
             "valor_taxa": _formatar_decimal(linha["valor_taxa"]),
             "taxa_adquirente": _formatar_decimal(linha["taxa_adquirente"]),
             "forma_pagto": linha["forma_pagto"],
