@@ -26,28 +26,51 @@ QUERY_ADQUIRENTES_FORMAS = """
 """
 
 QUERY_TOTAL_POR_FORMA = """
-    SELECT
-    adquirente,
-    "Nomenclatura SoftCase" AS nomenclatura,
-    bandeira,
-    Dia_Comp,
-    CASE 
-        WHEN adquirente IN ('Greenpass', 'SemParar') 
-            THEN ROUND(SUM(valor_lancamento) * CAST(REPLACE(taxa_adquirente, ',', '.') AS REAL) / 100, 2)
-        ELSE ROUND(SUM(valor_taxa), 2)
-    END AS valor_taxa,
-    taxa_adquirente,
-    forma_pagto,
-    ROUND(SUM(valor_lancamento), 2) AS total
-    FROM tbl_dados_estruturados
-    WHERE adquirente = :adquirente
-    AND forma_pagto = :forma_pagto
-    AND "Nomenclatura SoftCase" IS NOT NULL
-    AND TRIM("Nomenclatura SoftCase") <> ''
-    GROUP BY adquirente, "Nomenclatura SoftCase", bandeira, taxa_adquirente, forma_pagto
-    HAVING SUM(valor_lancamento) IS NOT NULL
-    AND ROUND(SUM(valor_lancamento), 2) <> 0
-    ORDER BY "Nomenclatura SoftCase", bandeira;
+  SELECT
+dados.adquirente,
+dados."Nomenclatura SoftCase" AS nomenclatura,
+dados.bandeira,
+CASE 
+    WHEN UPPER(dados.forma_pagto) = 'DINHEIRO' THEN dinheiro."Dias Comp. Dinheiro"
+    ELSE dados.Dia_Comp
+END AS Dia_Comp,
+CASE
+    WHEN dados.adquirente IN ('Greenpass', 'SemParar')
+        THEN ROUND(SUM(dados.valor_lancamento) * CAST(REPLACE(dados.taxa_adquirente, ',', '.') AS REAL) / 100, 2)
+    ELSE ROUND(SUM(dados.valor_taxa), 2)
+END AS valor_taxa,
+dados.taxa_adquirente,
+dados.forma_pagto,
+ROUND(SUM(dados.valor_lancamento), 2) AS total,
+date('now', 'localtime', '-1 day') || ' - ' ||
+CASE CAST(strftime('%w', 'now', 'localtime', '-1 day') AS INTEGER)
+    WHEN 0 THEN 'DOMINGO'
+    WHEN 1 THEN 'SEGUNDA'
+    WHEN 2 THEN 'TERÇA'
+    WHEN 3 THEN 'QUARTA'
+    WHEN 4 THEN 'QUINTA'
+    WHEN 5 THEN 'SEXTA'
+    WHEN 6 THEN 'SABADO'
+END AS data_ref
+FROM tbl_dados_estruturados AS dados
+LEFT JOIN tbl_Dinheiro AS dinheiro
+    ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', 'now', 'localtime', '-1 day') AS INTEGER)
+        WHEN 0 THEN 'DOMINGO'
+        WHEN 1 THEN 'SEGUNDA'
+        WHEN 2 THEN 'TERÇA'
+        WHEN 3 THEN 'QUARTA'
+        WHEN 4 THEN 'QUINTA'
+        WHEN 5 THEN 'SEXTA'
+        WHEN 6 THEN 'SABADO'
+    END
+WHERE dados.adquirente = :adquirente
+AND dados.forma_pagto = :forma_pagto
+AND dados."Nomenclatura SoftCase" IS NOT NULL
+AND TRIM(dados."Nomenclatura SoftCase") <> ''
+GROUP BY dados.adquirente, dados."Nomenclatura SoftCase", dados.bandeira, dados.taxa_adquirente, dados.forma_pagto, dinheiro."Dias Comp. Dinheiro"
+HAVING SUM(dados.valor_lancamento) IS NOT NULL
+AND ROUND(SUM(dados.valor_lancamento), 2) <> 0
+ORDER BY dados."Nomenclatura SoftCase", dados.bandeira;
 
 """
 
@@ -121,6 +144,7 @@ def itens_por_forma(
             "taxa_adquirente": _formatar_decimal(linha["taxa_adquirente"]),
             "forma_pagto": linha["forma_pagto"],
             "valor": _formatar_decimal(linha["total"]),
+            "data_ref": linha["data_ref"],
         }
         for linha in cursor.fetchall()
     ]
