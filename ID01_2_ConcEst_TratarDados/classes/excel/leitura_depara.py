@@ -70,11 +70,30 @@ FUNCOES_LEITURA = {
     "Dinheiro": ler_dinheiro,
 }
 
+def _limpar_valor(valor):
+    """Remove espaços em branco no início e no fim se o valor for string."""
+    return valor.strip() if isinstance(valor, str) else valor
+
+
+def _limpar_linha(linha):
+    """Aplica strip em todos os valores de uma linha (dict, list ou tuple)."""
+    if isinstance(linha, dict):
+        return {
+            _limpar_valor(chave): _limpar_valor(valor)
+            for chave, valor in linha.items()
+        }
+    if isinstance(linha, (list, tuple)):
+        return type(linha)(_limpar_valor(valor) for valor in linha)
+    return _limpar_valor(linha)
+
 
 def ler_todas_planilhas(
     caminho_arquivo: str | Path = CAMINHO_ARQUIVO_DEPARA,
 ) -> dict[str, LinhasPlanilha]:
     """Lê todas as planilhas do DEPARA.
+
+    Os valores de texto têm os espaços em branco do início e do fim
+    removidos durante a leitura.
 
     Args:
         caminho_arquivo: caminho do arquivo DEPARA_Estacionamento.xlsx.
@@ -94,7 +113,8 @@ def ler_todas_planilhas(
                     nome_planilha,
                 )
                 continue
-            dados[nome_planilha] = funcao_leitura(leitor)
+            linhas = funcao_leitura(leitor)
+            dados[nome_planilha] = [_limpar_linha(linha) for linha in linhas]
 
     return dados
 

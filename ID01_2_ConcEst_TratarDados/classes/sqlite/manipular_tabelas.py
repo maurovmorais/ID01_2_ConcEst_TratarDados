@@ -44,6 +44,7 @@ ESQUEMA_TABELAS: dict[str, dict[str, str]] = {
         "Bandeira": "TEXT",
         "Valida": "TEXT",
         "Não atuar": "TEXT",
+        "Origem":"TEXT",
     },
     "CondPagamt": {
         "Tipo de Lançamento": "TEXT",
@@ -102,6 +103,7 @@ def gravar_planilha_no_banco(
 
     db.criar_tabela(nome_tabela, esquema)
     db.inserir_dados(nome_tabela, linhas)
+
 
 
 def processar_depara(

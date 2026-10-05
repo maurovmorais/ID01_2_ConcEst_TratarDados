@@ -26,24 +26,37 @@ QUERY_ADQUIRENTES_FORMAS = """
 """
 
 QUERY_TOTAL_POR_FORMA = """
-  SELECT
-dados.adquirente,
-dados."Nomenclatura SoftCase" AS nomenclatura,
-dados.bandeira,
+  WITH normalizado AS (
+    SELECT
+        dados.*,
+        CASE
+            WHEN dados.data_processamento LIKE '__/__/____'
+                THEN substr(dados.data_processamento, 7, 4) || '-' ||
+                     substr(dados.data_processamento, 4, 2) || '-' ||
+                     substr(dados.data_processamento, 1, 2)
+            ELSE substr(dados.data_processamento, 1, 10)
+        END AS data_processamento_iso
+    FROM tbl_dados_estruturados AS dados
+)
+SELECT
+normalizado.adquirente,
+normalizado."Nomenclatura SoftCase" AS nomenclatura,
+normalizado.bandeira,
 CASE 
-    WHEN UPPER(dados.forma_pagto) = 'DINHEIRO' THEN dinheiro."Dias Comp. Dinheiro"
-    ELSE dados.Dia_Comp
+    WHEN UPPER(normalizado.forma_pagto) = 'DINHEIRO' THEN dinheiro."Dias Comp. Dinheiro"
+    ELSE normalizado.Dia_Comp
 END AS Dia_Comp,
 CASE
-    WHEN dados.adquirente IN ('Greenpass', 'SemParar')
-        THEN ROUND(SUM(dados.valor_lancamento) * CAST(REPLACE(dados.taxa_adquirente, ',', '.') AS REAL) / 100, 2)
-    ELSE ROUND(SUM(dados.valor_taxa), 2)
+    WHEN normalizado.adquirente IN ('Greenpass', 'SemParar')
+        THEN ROUND(SUM(normalizado.valor_lancamento) * CAST(REPLACE(normalizado.taxa_adquirente, ',', '.') AS REAL) / 100, 2)
+    ELSE ROUND(SUM(normalizado.valor_taxa), 2)
 END AS valor_taxa,
-dados.taxa_adquirente,
-dados.forma_pagto,
-ROUND(SUM(dados.valor_lancamento), 2) AS total,
-date('now', 'localtime', '-1 day') || ' - ' ||
-CASE CAST(strftime('%w', 'now', 'localtime', '-1 day') AS INTEGER)
+normalizado.taxa_adquirente,
+normalizado.forma_pagto,
+ROUND(SUM(normalizado.valor_lancamento), 2) AS total,
+normalizado.data_processamento,
+date(normalizado.data_processamento_iso, '-1 day') || ' - ' ||
+CASE CAST(strftime('%w', normalizado.data_processamento_iso, '-1 day') AS INTEGER)
     WHEN 0 THEN 'DOMINGO'
     WHEN 1 THEN 'SEGUNDA'
     WHEN 2 THEN 'TERÇA'
@@ -52,9 +65,9 @@ CASE CAST(strftime('%w', 'now', 'localtime', '-1 day') AS INTEGER)
     WHEN 5 THEN 'SEXTA'
     WHEN 6 THEN 'SABADO'
 END AS data_ref
-FROM tbl_dados_estruturados AS dados
+FROM normalizado
 LEFT JOIN tbl_Dinheiro AS dinheiro
-    ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', 'now', 'localtime', '-1 day') AS INTEGER)
+    ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', normalizado.data_processamento_iso, '-1 day') AS INTEGER)
         WHEN 0 THEN 'DOMINGO'
         WHEN 1 THEN 'SEGUNDA'
         WHEN 2 THEN 'TERÇA'
@@ -63,14 +76,14 @@ LEFT JOIN tbl_Dinheiro AS dinheiro
         WHEN 5 THEN 'SEXTA'
         WHEN 6 THEN 'SABADO'
     END
-WHERE dados.adquirente = :adquirente
-AND dados.forma_pagto = :forma_pagto
-AND dados."Nomenclatura SoftCase" IS NOT NULL
-AND TRIM(dados."Nomenclatura SoftCase") <> ''
-GROUP BY dados.adquirente, dados."Nomenclatura SoftCase", dados.bandeira, dados.taxa_adquirente, dados.forma_pagto, dinheiro."Dias Comp. Dinheiro"
-HAVING SUM(dados.valor_lancamento) IS NOT NULL
-AND ROUND(SUM(dados.valor_lancamento), 2) <> 0
-ORDER BY dados."Nomenclatura SoftCase", dados.bandeira;
+WHERE normalizado.adquirente = :adquirente
+AND normalizado.forma_pagto = :forma_pagto
+AND normalizado."Nomenclatura SoftCase" IS NOT NULL
+AND TRIM(normalizado."Nomenclatura SoftCase") <> ''
+GROUP BY normalizado.adquirente, normalizado."Nomenclatura SoftCase", normalizado.bandeira, normalizado.taxa_adquirente, normalizado.forma_pagto, normalizado.data_processamento, dinheiro."Dias Comp. Dinheiro"
+HAVING SUM(normalizado.valor_lancamento) IS NOT NULL
+AND ROUND(SUM(normalizado.valor_lancamento), 2) <> 0
+ORDER BY normalizado."Nomenclatura SoftCase", normalizado.bandeira;
 
 """
 

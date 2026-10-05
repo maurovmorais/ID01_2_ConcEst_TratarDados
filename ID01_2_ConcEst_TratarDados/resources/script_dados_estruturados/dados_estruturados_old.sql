@@ -47,48 +47,12 @@ WITH base AS (
         emp.CNPJ
     FROM tbl_empresas AS emp
     INNER JOIN tbl_aux_dados AS aux
-        ON (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.Cielo
-        )
-        OR (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.Veloe
-        )
-        OR (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.SemParar
-        )
-        OR (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.Greenpass
-        )
-        OR (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.ConectCar
-        )
-        OR (
-            CASE 
-                WHEN aux.empresa LIKE '% - %' 
-                    THEN TRIM(SUBSTR(aux.empresa, INSTR(aux.empresa, ' - ') + 3))
-                ELSE TRIM(aux.empresa)
-            END = emp.Bradesco
-        )
+        ON aux.empresa = emp.Cielo
+        OR aux.empresa = emp.Veloe
+        OR aux.empresa = emp.SemParar
+        OR aux.empresa = emp.Greenpass
+        OR aux.empresa = emp.ConectCar
+        OR aux.empresa = emp.Bradesco
     LEFT JOIN tbl_TaxaAdquirentes AS tax
         ON tax."Sigla Empresa" = emp.SIGLA
     LEFT JOIN tbl_TaxaCielo AS tcielo
