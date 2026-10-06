@@ -55,8 +55,8 @@ normalizado.taxa_adquirente,
 normalizado.forma_pagto,
 ROUND(SUM(normalizado.valor_lancamento), 2) AS total,
 normalizado.data_processamento,
-date(normalizado.data_processamento_iso, '-1 day') || ' - ' ||
-CASE CAST(strftime('%w', normalizado.data_processamento_iso, '-1 day') AS INTEGER)
+normalizado.data_processamento_iso || ' - ' ||
+CASE CAST(strftime('%w', normalizado.data_processamento_iso) AS INTEGER)
     WHEN 0 THEN 'DOMINGO'
     WHEN 1 THEN 'SEGUNDA'
     WHEN 2 THEN 'TERÇA'
@@ -67,7 +67,7 @@ CASE CAST(strftime('%w', normalizado.data_processamento_iso, '-1 day') AS INTEGE
 END AS data_ref
 FROM normalizado
 LEFT JOIN tbl_Dinheiro AS dinheiro
-    ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', normalizado.data_processamento_iso, '-1 day') AS INTEGER)
+    ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', normalizado.data_processamento_iso) AS INTEGER)
         WHEN 0 THEN 'DOMINGO'
         WHEN 1 THEN 'SEGUNDA'
         WHEN 2 THEN 'TERÇA'
