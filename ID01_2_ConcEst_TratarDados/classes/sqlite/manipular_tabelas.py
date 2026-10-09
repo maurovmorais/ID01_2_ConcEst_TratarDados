@@ -44,6 +44,7 @@ ESQUEMA_TABELAS: dict[str, dict[str, str]] = {
         "Bandeira": "TEXT",
         "Valida": "TEXT",
         "Não atuar": "TEXT",
+        "Forma de Pagamento Principal":"TEXT",
         "Origem":"TEXT",
     },
     "CondPagamt": {

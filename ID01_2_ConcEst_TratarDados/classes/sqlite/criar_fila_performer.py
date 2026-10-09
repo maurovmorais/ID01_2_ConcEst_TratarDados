@@ -35,36 +35,85 @@ QUERY_TOTAL_POR_FORMA = """
                      substr(dados.data_processamento, 4, 2) || '-' ||
                      substr(dados.data_processamento, 1, 2)
             ELSE substr(dados.data_processamento, 1, 10)
-        END AS data_processamento_iso
+        END AS data_processamento_iso,
+        CASE
+            WHEN instr(dados."Nomenclatura SoftCase", '(') > 0
+             AND instr(dados."Nomenclatura SoftCase", ')') >
+                 instr(dados."Nomenclatura SoftCase", '(')
+                THEN TRIM(substr(
+                    dados."Nomenclatura SoftCase",
+                    instr(dados."Nomenclatura SoftCase", '(') + 1,
+                    instr(dados."Nomenclatura SoftCase", ')')
+                        - instr(dados."Nomenclatura SoftCase", '(') - 1
+                ))
+        END AS origem_extraida
     FROM tbl_dados_estruturados AS dados
+),
+forma AS (
+    SELECT
+        UPPER(TRIM("Origem")) AS origem,
+        CASE
+            WHEN "Bandeira" IS NULL OR TRIM("Bandeira") = ''
+                THEN UPPER(TRIM("Tipo"))
+            ELSE UPPER(TRIM("Bandeira"))
+        END AS bandeira,
+        UPPER(TRIM("Tipo")) AS tipo,
+        MIN("Forma de Pagamento") AS forma_pagamento
+    FROM tbl_FormaDePagamento
+    WHERE LOWER(TRIM("Forma de Pagamento Principal")) = 'true'
+    GROUP BY
+        UPPER(TRIM("Origem")),
+        CASE
+            WHEN "Bandeira" IS NULL OR TRIM("Bandeira") = ''
+                THEN UPPER(TRIM("Tipo"))
+            ELSE UPPER(TRIM("Bandeira"))
+        END,
+        UPPER(TRIM("Tipo"))
+),
+forma_dinheiro AS (
+    SELECT
+        UPPER(TRIM("Origem")) AS origem,
+        MIN("Forma de Pagamento") AS forma_pagamento
+    FROM tbl_FormaDePagamento
+    WHERE LOWER(TRIM("Forma de Pagamento Principal")) = 'true'
+      AND UPPER(TRIM("Tipo")) = 'DINHEIRO'
+    GROUP BY UPPER(TRIM("Origem"))
 )
 SELECT
-normalizado.adquirente,
-normalizado."Nomenclatura SoftCase" AS nomenclatura,
-normalizado.bandeira,
-CASE 
-    WHEN UPPER(normalizado.forma_pagto) = 'DINHEIRO' THEN dinheiro."Dias Comp. Dinheiro"
-    ELSE normalizado.Dia_Comp
-END AS Dia_Comp,
-CASE
-    WHEN normalizado.adquirente IN ('Greenpass', 'SemParar')
-        THEN ROUND(SUM(normalizado.valor_lancamento) * CAST(REPLACE(normalizado.taxa_adquirente, ',', '.') AS REAL) / 100, 2)
-    ELSE ROUND(SUM(normalizado.valor_taxa), 2)
-END AS valor_taxa,
-normalizado.taxa_adquirente,
-normalizado.forma_pagto,
-ROUND(SUM(normalizado.valor_lancamento), 2) AS total,
-normalizado.data_processamento,
-normalizado.data_processamento_iso || ' - ' ||
-CASE CAST(strftime('%w', normalizado.data_processamento_iso) AS INTEGER)
-    WHEN 0 THEN 'DOMINGO'
-    WHEN 1 THEN 'SEGUNDA'
-    WHEN 2 THEN 'TERÇA'
-    WHEN 3 THEN 'QUARTA'
-    WHEN 4 THEN 'QUINTA'
-    WHEN 5 THEN 'SEXTA'
-    WHEN 6 THEN 'SABADO'
-END AS data_ref
+    normalizado.adquirente,
+    normalizado."Nomenclatura SoftCase" AS nomenclatura,
+    normalizado.bandeira,
+    CASE
+        WHEN UPPER(normalizado.forma_pagto) = 'DINHEIRO' THEN dinheiro."Dias Comp. Dinheiro"
+        ELSE normalizado.Dia_Comp
+    END AS Dia_Comp,
+    CASE
+        WHEN normalizado.adquirente IN ('Greenpass', 'SemParar')
+            THEN ROUND(SUM(normalizado.valor_lancamento) * CAST(REPLACE(normalizado.taxa_adquirente, ',', '.') AS REAL) / 100, 2)
+        ELSE ROUND(SUM(normalizado.valor_taxa), 2)
+    END AS valor_taxa,
+    normalizado.taxa_adquirente,
+    normalizado.forma_pagto,
+    CASE
+        WHEN UPPER(TRIM(normalizado.forma_pagto)) = 'TAG'
+            THEN normalizado.adquirente
+        WHEN UPPER(TRIM(normalizado.forma_pagto)) = 'DINHEIRO'
+         AND (normalizado.bandeira IS NULL OR TRIM(normalizado.bandeira) = '')
+            THEN COALESCE(forma.forma_pagamento, forma_dinheiro.forma_pagamento)
+        ELSE forma.forma_pagamento
+    END AS forma_pagamento,
+    ROUND(SUM(normalizado.valor_lancamento), 2) AS total,
+    normalizado.data_processamento,
+    normalizado.data_processamento_iso || ' - ' ||
+    CASE CAST(strftime('%w', normalizado.data_processamento_iso) AS INTEGER)
+        WHEN 0 THEN 'DOMINGO'
+        WHEN 1 THEN 'SEGUNDA'
+        WHEN 2 THEN 'TERÇA'
+        WHEN 3 THEN 'QUARTA'
+        WHEN 4 THEN 'QUINTA'
+        WHEN 5 THEN 'SEXTA'
+        WHEN 6 THEN 'SABADO'
+    END AS data_ref
 FROM normalizado
 LEFT JOIN tbl_Dinheiro AS dinheiro
     ON UPPER(dinheiro."Dia da Semana") = CASE CAST(strftime('%w', normalizado.data_processamento_iso) AS INTEGER)
@@ -76,13 +125,29 @@ LEFT JOIN tbl_Dinheiro AS dinheiro
         WHEN 5 THEN 'SEXTA'
         WHEN 6 THEN 'SABADO'
     END
+LEFT JOIN forma
+    ON forma.origem   = UPPER(normalizado.origem_extraida)
+   AND forma.bandeira = UPPER(COALESCE(NULLIF(TRIM(normalizado.bandeira), ''),
+                                       TRIM(normalizado.forma_pagto)))
+   AND forma.tipo     = UPPER(TRIM(normalizado.forma_pagto))
+LEFT JOIN forma_dinheiro
+    ON forma_dinheiro.origem = UPPER(normalizado.origem_extraida)
 WHERE normalizado.adquirente = :adquirente
-AND normalizado.forma_pagto = :forma_pagto
-AND normalizado."Nomenclatura SoftCase" IS NOT NULL
-AND TRIM(normalizado."Nomenclatura SoftCase") <> ''
-GROUP BY normalizado.adquirente, normalizado."Nomenclatura SoftCase", normalizado.bandeira, normalizado.taxa_adquirente, normalizado.forma_pagto, normalizado.data_processamento, dinheiro."Dias Comp. Dinheiro"
+  AND normalizado.forma_pagto = :forma_pagto
+  AND normalizado."Nomenclatura SoftCase" IS NOT NULL
+  AND TRIM(normalizado."Nomenclatura SoftCase") <> ''
+GROUP BY
+    normalizado.adquirente,
+    normalizado."Nomenclatura SoftCase",
+    normalizado.bandeira,
+    normalizado.taxa_adquirente,
+    normalizado.forma_pagto,
+    normalizado.data_processamento,
+    dinheiro."Dias Comp. Dinheiro",
+    forma.forma_pagamento,
+    forma_dinheiro.forma_pagamento
 HAVING SUM(normalizado.valor_lancamento) IS NOT NULL
-AND ROUND(SUM(normalizado.valor_lancamento), 2) <> 0
+   AND ROUND(SUM(normalizado.valor_lancamento), 2) <> 0
 ORDER BY normalizado."Nomenclatura SoftCase", normalizado.bandeira;
 
 """
@@ -156,6 +221,7 @@ def itens_por_forma(
             "valor_taxa": _formatar_decimal(linha["valor_taxa"]),
             "taxa_adquirente": _formatar_decimal(linha["taxa_adquirente"]),
             "forma_pagto": linha["forma_pagto"],
+            "forma_pagamento": linha["forma_pagamento"],
             "valor": _formatar_decimal(linha["total"]),
             "data_ref": linha["data_ref"],
         }
